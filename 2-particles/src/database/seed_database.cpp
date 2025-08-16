@@ -1,0 +1,87 @@
+#include <database.h>
+
+#include <random>
+#include <sqlite3.h>
+
+bool seed_database(const std::string& DB_PATH) {
+
+    const int NUM_PARTICLES = 200;
+    const float SPEED_MIN = -2.0f;
+    const float SPEED_MAX = 2.0f;
+    const unsigned int WINDOW_XINI = 0;
+    const unsigned int WINDOW_YINI = 0;
+    const unsigned int WINDOW_WIDTH = 800;
+    const unsigned int WINDOW_HEIGHT = 600;
+
+    sqlite3* db;
+    if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) {
+        std::cerr << "Error abriendo DB: " << sqlite3_errmsg(db) << "\n";
+        return false;
+    }
+
+    const char* createTablesSQL = R"SQL(
+        CREATE TABLE IF NOT EXISTS particles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            vx REAL NOT NULL,
+            vy REAL NOT NULL,
+            r INTEGER NOT NULL,
+            g INTEGER NOT NULL,
+            b INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS camera (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL
+        );
+    )SQL";
+
+    char* errMsg = nullptr;
+    if (sqlite3_exec(db, createTablesSQL, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        std::cerr << "Error creando tablas: " << errMsg << "\n";
+        sqlite3_free(errMsg);
+        sqlite3_close(db);
+        return false;
+    }
+
+    // Insertar cámara inicial
+    std::string cameraSQLInsert =
+        "INSERT OR REPLACE INTO camera (id, x, y, width, height) VALUES (" +
+        std::to_string(WINDOW_XINI) + "," + std::to_string(WINDOW_YINI) + "," +
+        std::to_string(WINDOW_WIDTH) + "," + std::to_string(WINDOW_HEIGHT) + ");";
+    sqlite3_exec(db, cameraSQLInsert.c_str(), nullptr, nullptr, nullptr);
+
+    // Generador aleatorio
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<float> distX(0.f, WINDOW_WIDTH);
+    std::uniform_real_distribution<float> distY(0.f, WINDOW_HEIGHT);
+    std::uniform_real_distribution<float> distVel(SPEED_MIN, SPEED_MAX);
+    std::uniform_int_distribution<int> distColor(0, 255);
+
+    // Limpiar partículas previas
+    sqlite3_exec(db, "DELETE FROM particles;", nullptr, nullptr, nullptr);
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    for (int i = 0; i < NUM_PARTICLES; ++i) {
+        float x = distX(rng);
+        float y = distY(rng);
+        float vx = distVel(rng);
+        float vy = distVel(rng);
+        int r = distColor(rng);
+        int g = distColor(rng);
+        int b = distColor(rng);
+
+        std::string insertSQL = "INSERT INTO particles (x, y, vx, vy, r, g, b) VALUES (" +
+            std::to_string(x) + "," + std::to_string(y) + "," +
+            std::to_string(vx) + "," + std::to_string(vy) + "," +
+            std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + ");";
+        sqlite3_exec(db, insertSQL.c_str(), nullptr, nullptr, nullptr);
+    }
+    sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
+
+    sqlite3_close(db);
+    return true;
+}

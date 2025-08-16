@@ -1,0 +1,14 @@
+{
+    "window": {
+        "width": 800,
+        "height": 600
+    },
+    "particles": {
+        "count": 300,
+        "radius": 3.0,
+        "speed_min": -2.0,
+        "speed_max": 2.0,
+        "color_random": true
+    }
+}
+
