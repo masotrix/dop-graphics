@@ -22,6 +22,7 @@ target_include_directories(common_pch INTERFACE ${PROJECT_SOURCE_DIR}/src)
 # --- Subdirectorios ---
 add_subdirectory(src/data)
 add_subdirectory(src/particles)
+add_subdirectory(src/light)
 add_subdirectory(src/database)
 add_subdirectory(src/camera)
 
@@ -32,6 +33,7 @@ add_executable(run src/main.cpp)
 target_link_libraries(run PRIVATE
     data_lib
     particles_lib
+    light_lib
     database_lib
     camera_lib
     common_pch

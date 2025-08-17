@@ -1,9 +1,8 @@
-#include <SFML/Graphics.hpp>
-
-#include <sqlite3.h>
-
-#include <string>
 #include <particles.h>
+
+#include <SFML/Graphics.hpp>
+#include <sqlite3.h>
+#include <string>
 
 Particles create_particles(const std::string& DB_PATH) {
 
