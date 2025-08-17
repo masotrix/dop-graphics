@@ -4,6 +4,12 @@
 
 void move_light(Light& light, Camera& camera) {
     sf::Vector2i mouse = sf::Mouse::getPosition(*(camera.window));
-    light.position = (sf::Vector2f)mouse;
-    light.shape.setPosition(light.position);
+
+    float x = mouse.x - camera.window->getSize().x / 2.f;
+    float y = mouse.y - camera.window->getSize().y / 2.f;
+    float z = 500.f;
+
+    light.position = { x, y, z };
+
+    light.shape.setPosition(mouse.x, mouse.y);
 }

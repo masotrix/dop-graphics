@@ -4,7 +4,7 @@
 
 struct Light {
     sf::CircleShape shape;
-    sf::Vector2f position;
+    sf::Vector3f position;
     float radius;
     sf::Color color;
 };

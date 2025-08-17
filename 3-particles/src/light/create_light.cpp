@@ -5,7 +5,7 @@
 Light create_light(float x, float y, float radius, sf::Color color) {
     Light light;
     light.radius = radius;
-    light.position = {x, y};
+    light.position = {x, y, 500.f};
     light.color = color;
 
     light.shape.setRadius(radius);

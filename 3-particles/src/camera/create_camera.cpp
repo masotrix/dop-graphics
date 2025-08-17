@@ -15,10 +15,10 @@ Camera create_camera(const std::string& DB_PATH) {
     sqlite3_open(DB_PATH.c_str(), &db);
 
     int wx = 0, wy = 0;
-    unsigned int width = 800, height = 600;
+    unsigned int width = 800, height = 600, depth = 1000;
 
     // Consulta para leer todos los valores
-    const char* sql = "SELECT x, y, z, wx, wy, width, height FROM camera WHERE id = 1;";
+    const char* sql = "SELECT x, y, z, wx, wy, width, height, depth FROM camera WHERE id = 1;";
     sqlite3_stmt* stmt;
 
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
@@ -26,10 +26,13 @@ Camera create_camera(const std::string& DB_PATH) {
             camera.x = sqlite3_column_int(stmt, 0);
             camera.y = sqlite3_column_int(stmt, 1);
             camera.z = sqlite3_column_int(stmt, 2);
+
             wx = sqlite3_column_int(stmt, 3);
             wy = sqlite3_column_int(stmt, 4);
+
             width = static_cast<unsigned int>(sqlite3_column_int(stmt, 5));
             height = static_cast<unsigned int>(sqlite3_column_int(stmt, 6));
+            depth = static_cast<unsigned int>(sqlite3_column_int(stmt, 7));
         }
     } else {
         std::cerr << "Error al preparar la consulta: " << sqlite3_errmsg(db) << std::endl;

@@ -5,24 +5,35 @@
 
 void render_particles(Particles& particles, Camera& camera, const Light& light) {
 
-    const float radius = 3.0f;
+    const float base_radius = 3.0f;
+    const float focal_length = 500.0f;
 
     camera.window->clear(sf::Color::Black);
 
     for (size_t i = 0; i < particles.x.size(); ++i) {
 
-        sf::CircleShape point(radius);
-        point.setPosition(particles.x[i], particles.y[i]);
-        //point.setPosition(particles.x[i], particles.y[i], particles.z[i]);
+        float x = particles.x[i];
+        float y = particles.y[i];
+        float z = particles.z[i];
 
-        float dx = particles.x[i] - light.position.x;
-        float dy = particles.y[i] - light.position.y;
-        //float dz = particles.z[i] - light.position.z;
-        float dist = std::sqrt(dx * dx + dy * dy);
-        //float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (z <= 1.f) continue;
+
+        float screenX = (x / z) * focal_length + camera.window->getSize().x / 2.f;
+        float screenY = (y / z) * focal_length + camera.window->getSize().y / 2.f;
+
+        float radius = base_radius * (focal_length / z);
+
+        sf::CircleShape point(radius);
+        point.setPosition(screenX, screenY);
+
+        float dx = x - light.position.x;
+        float dy = y - light.position.y;
+        float dz = z - light.position.z;
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
 
         float intensity = 1.f - (dist / light.radius);
         if (intensity < 0.f) intensity = 0.f;
+        //float intensity = 1.f;
 
         sf::Color base = particles.colors[i];
         sf::Color lit(

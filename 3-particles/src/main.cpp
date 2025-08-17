@@ -20,7 +20,7 @@ int main() {
 
     Particles particles = create_particles(DB_PATH);
 
-    Light light = create_light(400, 300, 150.f, sf::Color(255, 255, 200));
+    Light light = create_light(0, 0, 300.f, sf::Color(255, 255, 200));
 
     while (camera.window->isOpen()) {
 
