@@ -1,3 +1,4 @@
+// src/particles/render_particles.cpp
 #include <particles.h>
 
 #include <SFML/Graphics.hpp>
@@ -8,8 +9,6 @@ void render_particles(Particles& particles, Camera& camera, const Light& light) 
     const float base_radius = 3.0f;
     const float focal_length = 500.0f;
 
-    camera.window->clear(sf::Color::Black);
-
     for (size_t i = 0; i < particles.x.size(); ++i) {
 
         float x = particles.x[i];
@@ -18,8 +17,8 @@ void render_particles(Particles& particles, Camera& camera, const Light& light) 
 
         if (z <= 1.f) continue;
 
-        float screenX = (x / z) * focal_length + camera.window->getSize().x / 2.f;
-        float screenY = (y / z) * focal_length + camera.window->getSize().y / 2.f;
+        float screenX = (x * focal_length / z) + camera.window->getSize().x / 2.f;
+        float screenY = (y * focal_length / z) + camera.window->getSize().y / 2.f;
 
         float radius = base_radius * (focal_length / z);
 
@@ -33,7 +32,6 @@ void render_particles(Particles& particles, Camera& camera, const Light& light) 
 
         float intensity = 1.f - (dist / light.radius);
         if (intensity < 0.f) intensity = 0.f;
-        //float intensity = 1.f;
 
         sf::Color base = particles.colors[i];
         sf::Color lit(

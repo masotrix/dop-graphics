@@ -24,6 +24,8 @@ int main() {
 
     while (camera.window->isOpen()) {
 
+        camera.window->clear(sf::Color::Black);
+
         poll_event(camera);
 
         move_particles(particles, camera);
