@@ -1,0 +1,404 @@
+
+=== src/main.cpp ===
+#include <SFML/Graphics.hpp>
+#include <sqlite3.h>
+#include <random>
+#include <iostream>
+#include <vector>
+#include <string>
+
+#include <light.h>
+#include <particles.h>
+#include <database.h>
+#include <camera.h>
+
+const std::string DB_PATH = "game.db";
+
+int main() {
+
+    seed_database(DB_PATH);
+
+    Camera camera = create_camera(DB_PATH);
+
+    Particles particles = create_particles(DB_PATH);
+
+    Light light = create_light(0, 0, 300.f, sf::Color(255, 255, 200));
+
+    while (camera.window->isOpen()) {
+
+        camera.window->clear(sf::Color::Black);
+
+        poll_event(camera);
+
+        move_particles(particles, camera);
+        move_light(light, camera);
+
+        render_particles(particles, camera, light);
+
+        camera.window->display();
+    }
+
+    return 0;
+}
+
+
+=== src/camera/create_camera.cpp ===
+#include <camera.h>
+
+#include <SFML/Graphics.hpp>
+#include <sqlite3.h>
+#include <string>
+#include <utility>
+#include <iostream>
+
+Camera create_camera(const std::string& DB_PATH) {
+
+    Camera camera;
+    camera.window = std::make_unique<sf::RenderWindow>();
+
+    sqlite3* db;
+    sqlite3_open(DB_PATH.c_str(), &db);
+
+    int wx = 0, wy = 0;
+    unsigned int width = 800, height = 600, depth = 1000;
+
+    // Consulta para leer todos los valores
+    const char* sql = "SELECT x, y, z, wx, wy, width, height, depth FROM camera WHERE id = 1;";
+    sqlite3_stmt* stmt;
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            camera.x = sqlite3_column_int(stmt, 0);
+            camera.y = sqlite3_column_int(stmt, 1);
+            camera.z = sqlite3_column_int(stmt, 2);
+
+            wx = sqlite3_column_int(stmt, 3);
+            wy = sqlite3_column_int(stmt, 4);
+
+            width = static_cast<unsigned int>(sqlite3_column_int(stmt, 5));
+            height = static_cast<unsigned int>(sqlite3_column_int(stmt, 6));
+            depth = static_cast<unsigned int>(sqlite3_column_int(stmt, 7));
+        }
+    } else {
+        std::cerr << "Error al preparar la consulta: " << sqlite3_errmsg(db) << std::endl;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    camera.window->create(sf::VideoMode(width, height), "Particle Animation (SQLite)");
+    camera.window->setPosition(sf::Vector2i(wx, wy));
+
+    camera.window->setFramerateLimit(60);
+
+    return camera;
+}
+
+
+=== src/camera/poll_event.cpp ===
+#include <SFML/Graphics.hpp>
+
+#include <camera.h>
+
+void poll_event(Camera& camera) {
+
+    sf::Event event;
+
+    while (camera.window->pollEvent(event)) {
+
+        if (event.type == sf::Event::Closed ||
+
+            (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Q))
+
+            camera.window->close();
+    }
+
+    return;
+}
+
+
+=== src/database/seed_database.cpp ===
+// src/database/seed_database.cpp
+#include <database.h>
+
+#include <random>
+#include <sqlite3.h>
+#include <iostream>
+#include <cassert>
+#include <chrono>
+
+bool seed_database(const std::string& DB_PATH) {
+
+    const int NUM_PARTICLES = 200;
+    const float SPEED_MIN = -30.0f, SPEED_MAX = 30.0f;
+    const float CAMERA_XINI = 0, CAMERA_YINI = 0, CAMERA_ZINI = 500;
+    const unsigned int WINDOW_XINI = 0, WINDOW_YINI = 0;
+    const unsigned int WINDOW_WIDTH = 800, WINDOW_HEIGHT = 600, WINDOW_DEPTH = 1000;
+
+    sqlite3* db;
+    if (sqlite3_open(DB_PATH.c_str(), &db) != SQLITE_OK) {
+        std::cerr << "Error abriendo DB: " << sqlite3_errmsg(db) << "\n";
+        return false;
+    }
+
+    const char* createTablesSQL = R"SQL(
+        DROP TABLE IF EXISTS particles;
+        DROP TABLE IF EXISTS camera;
+        CREATE TABLE particles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            z REAL NOT NULL,
+            vx REAL NOT NULL,
+            vy REAL NOT NULL,
+            vz REAL NOT NULL,
+            r INTEGER NOT NULL,
+            g INTEGER NOT NULL,
+            b INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS camera (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            z REAL NOT NULL,
+            wx REAL NOT NULL,
+            wy REAL NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            depth INTEGER NOT NULL
+        );
+    )SQL";
+
+    char* errMsg = nullptr;
+    if (sqlite3_exec(db, createTablesSQL, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        std::cerr << "Error creando tablas: " << errMsg << "\n";
+        sqlite3_free(errMsg);
+        sqlite3_close(db);
+        return false;
+    }
+
+    // Insertar cámara inicial
+    std::string cameraSQLInsert =
+        "INSERT INTO camera (x, y, z, wx, wy, width, height, depth) VALUES (" +
+        std::to_string(CAMERA_XINI) + "," +
+        std::to_string(CAMERA_YINI) + "," +
+        std::to_string(CAMERA_ZINI) + "," +
+
+        std::to_string(WINDOW_XINI) + "," +
+        std::to_string(WINDOW_YINI) + "," +
+
+        std::to_string(WINDOW_WIDTH) + "," +
+        std::to_string(WINDOW_HEIGHT) + "," +
+        std::to_string(WINDOW_DEPTH) + ");";
+    sqlite3_exec(db, cameraSQLInsert.c_str(), nullptr, nullptr, nullptr);
+
+    // Generador aleatorio
+    //std::mt19937 rng(std::random_device{}());
+    std::mt19937 rng(static_cast<unsigned int>(
+        std::chrono::steady_clock::now().time_since_epoch().count()
+    ));
+
+    std::uniform_real_distribution<float> distX(
+        -static_cast<float>(WINDOW_WIDTH) / 2.f, static_cast<float>(WINDOW_WIDTH) / 2.f);
+
+    std::uniform_real_distribution<float> distY(
+        -static_cast<float>(WINDOW_HEIGHT) / 2.f, static_cast<float>(WINDOW_HEIGHT) / 2.f);
+
+    std::uniform_real_distribution<float> distZ(
+        1.f, static_cast<float>(WINDOW_DEPTH)); // ojo: z > 0
+
+    std::uniform_real_distribution<float> distVel(SPEED_MIN, SPEED_MAX);
+    std::uniform_int_distribution<int> distColor(0, 255);
+
+    sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    for (int i = 0; i < NUM_PARTICLES; ++i) {
+        float x = distX(rng), y = distY(rng), z = distZ(rng);
+        float vx = distVel(rng)*10.f, vy = distVel(rng)*10.f, vz = distVel(rng);
+        int r = distColor(rng), g = distColor(rng), b = distColor(rng);
+
+        std::string insertSQL = "INSERT INTO particles (x, y, z, vx, vy, vz, r, g, b) VALUES (" +
+            std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + "," +
+            //std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(vz) + "," +
+            std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(0) + "," +
+            std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b) + ");";
+        sqlite3_exec(db, insertSQL.c_str(), nullptr, nullptr, nullptr);
+    }
+    sqlite3_exec(db, "COMMIT;", nullptr, nullptr, nullptr);
+
+    sqlite3_close(db);
+    return true;
+}
+
+
+=== src/light/create_light.cpp ===
+#include <light.h>
+
+#include <SFML/Graphics.hpp>
+
+Light create_light(float x, float y, float radius, sf::Color color) {
+    Light light;
+    light.radius = radius;
+    light.position = {x, y, 500.f};
+    light.color = color;
+
+    light.shape.setRadius(radius);
+    light.shape.setOrigin(radius, radius); // centro
+    light.shape.setPosition(x, y);
+    light.shape.setFillColor(sf::Color(color.r, color.g, color.b, 128)); // semi-transparente
+
+    return light;
+}
+
+
+
+=== src/light/move_light.cpp ===
+#include <light.h>
+
+#include <SFML/Graphics.hpp>
+
+void move_light(Light& light, Camera& camera) {
+    sf::Vector2i mouse = sf::Mouse::getPosition(*(camera.window));
+
+    float x = mouse.x - camera.window->getSize().x / 2.f;
+    float y = mouse.y - camera.window->getSize().y / 2.f;
+    float z = 500.f;
+
+    light.position = { x, y, z };
+
+    light.shape.setPosition(mouse.x, mouse.y);
+}
+
+
+=== src/light/render_light.cpp ===
+#include <light.h>
+
+#include <SFML/Graphics.hpp>
+
+void render_light(Light& light, Camera& camera) {
+    camera.window->draw(light.shape, sf::BlendAdd);
+}
+
+
+
+=== src/particles/create_particles.cpp ===
+// src/particles/create_particles.cpp
+#include <particles.h>
+
+#include <SFML/Graphics.hpp>
+#include <sqlite3.h>
+#include <string>
+
+Particles create_particles(const std::string& DB_PATH) {
+
+    Particles particles;
+
+    sqlite3* db;
+    sqlite3_open(DB_PATH.c_str(), &db);
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(db, "SELECT x, y, z, vx, vy, vz, r, g, b FROM particles;",
+        -1, &stmt, nullptr);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        particles.x.push_back(static_cast<float>(sqlite3_column_double(stmt, 0)));
+        particles.y.push_back(static_cast<float>(sqlite3_column_double(stmt, 1)));
+        particles.z.push_back(static_cast<float>(sqlite3_column_double(stmt, 2)));
+
+        particles.vx.push_back(static_cast<float>(sqlite3_column_double(stmt, 3)));
+        particles.vy.push_back(static_cast<float>(sqlite3_column_double(stmt, 4)));
+        particles.vz.push_back(static_cast<float>(sqlite3_column_double(stmt, 5)));
+
+        particles.colors.emplace_back(
+            sqlite3_column_int(stmt, 6),
+            sqlite3_column_int(stmt, 7),
+            sqlite3_column_int(stmt, 8)
+        );
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+
+    return particles;
+}
+
+
+=== src/particles/move_particles.cpp ===
+// src/particles/move_particles.cpp
+#include <SFML/Graphics.hpp>
+
+#include <particles.h>
+
+void move_particles(Particles& particles, Camera& camera) {
+
+    sf::Vector2u size = camera.window->getSize();
+    unsigned int width = size.x;
+    unsigned int height = size.y;
+    unsigned int depth = 1000;
+
+    for (size_t i = 0; i < particles.x.size(); ++i) {
+        particles.x[i] += particles.vx[i];
+
+        if (particles.x[i] < -width/2 || particles.x[i] > width/2)
+            particles.vx[i] = -particles.vx[i];
+
+        particles.y[i] += particles.vy[i];
+
+        if (particles.y[i] < -height/2 || particles.y[i] > height/2)
+            particles.vy[i] = -particles.vy[i];
+
+        particles.z[i] += particles.vz[i];
+
+        if (particles.z[i] < 1 || particles.z[i] > depth)
+            particles.vz[i] = -particles.vz[i];
+    }
+}
+
+
+=== src/particles/render_particles.cpp ===
+// src/particles/render_particles.cpp
+#include <particles.h>
+
+#include <SFML/Graphics.hpp>
+#include <cmath>
+
+void render_particles(Particles& particles, Camera& camera, const Light& light) {
+
+    const float base_radius = 3.0f;
+    const float focal_length = 500.0f;
+
+    for (size_t i = 0; i < particles.x.size(); ++i) {
+
+        float x = particles.x[i];
+        float y = particles.y[i];
+        float z = particles.z[i];
+
+        if (z <= 1.f) continue;
+
+        float screenX = (x * focal_length / z) + camera.window->getSize().x / 2.f;
+        float screenY = (y * focal_length / z) + camera.window->getSize().y / 2.f;
+
+        float radius = base_radius * (focal_length / z);
+
+        sf::CircleShape point(radius);
+        point.setPosition(screenX, screenY);
+
+        float dx = x - light.position.x;
+        float dy = y - light.position.y;
+        float dz = z - light.position.z;
+        float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+        float intensity = 1.f - (dist / light.radius);
+        if (intensity < 0.f) intensity = 0.f;
+
+        sf::Color base = particles.colors[i];
+        sf::Color lit(
+            static_cast<sf::Uint8>(base.r * intensity),
+            static_cast<sf::Uint8>(base.g * intensity),
+            static_cast<sf::Uint8>(base.b * intensity),
+            base.a
+        );
+
+        point.setFillColor(lit);
+        camera.window->draw(point);
+    }
+}
+
